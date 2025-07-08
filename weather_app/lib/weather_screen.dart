@@ -28,20 +28,36 @@ class _WeatherScreenState extends State<WeatherScreen> {
       // Get current position
       Position position = await _getCurrentPosition();
 
+      print('Making API request to: https://api.openweathermap.org/data/2.5/forecast?lat=${position.latitude}&lon=${position.longitude}&APPID=$openWeatherAPIKey');
+      
       final res = await http.get(
         Uri.parse(
           'https://api.openweathermap.org/data/2.5/forecast?lat=${position.latitude}&lon=${position.longitude}&APPID=$openWeatherAPIKey',
         ),
-      );
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 10));
+      
+      print('API Response status: ${res.statusCode}');
+      print('API Response body: ${res.body}');
+      
       final data = jsonDecode(res.body);
 
       if (data['cod'] != '200') {
-        throw "An unexpected error occurred";
+        throw Exception("API Error: ${data['message'] ?? 'Unknown error'}");
       }
 
       return data;
-    } on Exception catch (e) {
-      throw e.toString();
+    } catch (e) {
+      print('Error in getCurrentWeather: $e');
+      if (e.toString().contains('SocketException')) {
+        throw Exception('Network Error: Please check your internet connection and try again.');
+      } else if (e.toString().contains('TimeoutException')) {
+        throw Exception('Request timeout: The server is taking too long to respond.');
+      } else {
+        throw Exception('Error: ${e.toString()}');
+      }
     }
   }
 
@@ -132,7 +148,44 @@ class _WeatherScreenState extends State<WeatherScreen> {
             }
 
             if (asyncSnapshot.hasError) {
-              return Center(child: Text(asyncSnapshot.error.toString()));
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Colors.white70,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        asyncSnapshot.error.toString(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            weather = getCurrentWeather();
+                          });
+                        },
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withOpacity(0.2),
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
             }
             final data = asyncSnapshot.data!;
             final currWeatherData = data['list'][0];
@@ -192,7 +245,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                                         style: const TextStyle(
                                           fontSize: 18,
                                           fontWeight: FontWeight.bold,
-                                          color: const Color.fromARGB(
+                                          color: Color.fromARGB(
                                             255,
                                             3,
                                             25,
